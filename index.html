@@ -1,0 +1,751 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full bg-slate-50">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Monthly Budget & Investment Dashboard</title>
+
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Chart.js for visualization -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- FontAwesome for sheet icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+
+    <!-- Firebase (Auth + Firestore) -->
+    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'monospace'],
+                    },
+                    colors: {
+                        excel: {
+                            50: '#f0fdf4',
+                            100: '#dcfce7',
+                            600: '#16a34a',
+                            700: '#15803d',
+                            800: '#166534',
+                            dark: '#0f5128'
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+<body class="h-full flex flex-col text-slate-800 bg-slate-100 antialiased">
+
+    <!-- Login / Sign-up Screen (shown when signed out) -->
+    <div id="loginScreen" class="flex-1 flex items-center justify-center p-4">
+        <div class="bg-white rounded-xl shadow-lg border border-slate-200 w-full max-w-sm p-6 space-y-4">
+            <div class="text-center space-y-1">
+                <div class="w-12 h-12 mx-auto rounded-lg bg-excel-700 text-white flex items-center justify-center font-bold text-2xl shadow-md">
+                    <i class="fa-solid fa-file-excel"></i>
+                </div>
+                <h1 class="text-lg font-bold text-slate-900">Budget Dashboard</h1>
+                <p class="text-xs text-slate-500">Sign in to access your data from any device</p>
+            </div>
+
+            <div id="authError" class="hidden text-xs text-rose-600 bg-rose-50 border border-rose-200 rounded-md p-2"></div>
+
+            <div class="space-y-3">
+                <div>
+                    <label class="block text-xs font-semibold text-slate-700 mb-1">Email</label>
+                    <input type="email" id="authEmail" placeholder="you@example.com" class="w-full text-sm border border-slate-300 rounded-md p-2 focus:ring-1 focus:ring-excel-600 focus:outline-none">
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-slate-700 mb-1">Password</label>
+                    <input type="password" id="authPassword" placeholder="At least 6 characters" class="w-full text-sm border border-slate-300 rounded-md p-2 focus:ring-1 focus:ring-excel-600 focus:outline-none">
+                </div>
+            </div>
+
+            <div class="flex space-x-2">
+                <button onclick="handleLogin()" class="flex-1 bg-excel-600 hover:bg-excel-700 text-white py-2 rounded-md text-sm font-medium shadow-sm">Log In</button>
+                <button onclick="handleSignup()" class="flex-1 bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 py-2 rounded-md text-sm font-medium shadow-sm">Sign Up</button>
+            </div>
+
+            <div class="relative py-1">
+                <div class="absolute inset-0 flex items-center"><div class="w-full border-t border-slate-200"></div></div>
+                <div class="relative flex justify-center text-[10px] uppercase"><span class="bg-white px-2 text-slate-400">or</span></div>
+            </div>
+
+            <button onclick="handleGoogleLogin()" class="w-full flex items-center justify-center space-x-2 border border-slate-300 rounded-md py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">
+                <i class="fa-brands fa-google text-rose-500"></i>
+                <span>Continue with Google</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- App Shell (shown when signed in) -->
+    <div id="appShell" class="hidden flex-1 flex flex-col min-h-0">
+
+    <!-- Top Application Bar -->
+    <header class="bg-white border-b border-slate-200 px-4 py-3 flex flex-wrap items-center justify-between shadow-sm z-20 gap-3">
+        <div class="flex items-center space-x-3">
+            <div class="w-10 h-10 rounded-lg bg-excel-700 text-white flex items-center justify-center font-bold text-xl shadow-md">
+                <i class="fa-solid fa-file-excel"></i>
+            </div>
+            <div>
+                <div class="flex items-center space-x-2">
+                    <h1 class="text-lg font-bold text-slate-900 leading-tight">Monthly Budget & Investment Dashboard</h1>
+                    <span class="text-xs px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded-full font-medium">Auto-Calc Engine</span>
+                </div>
+                <p class="text-xs text-slate-500">100% user-entered data • Nothing hardcoded</p>
+            </div>
+        </div>
+
+        <!-- Global Action Bar -->
+        <div class="flex items-center space-x-2 text-sm">
+            <div class="bg-slate-100 px-3 py-1.5 rounded-md border border-slate-200 flex items-center space-x-2">
+                <i class="fa-regular fa-calendar text-slate-500"></i>
+                <span class="text-xs text-slate-500 font-medium">Active View Month:</span>
+                <input type="month" id="globalMonthPicker" class="bg-transparent font-semibold text-slate-800 text-xs focus:outline-none cursor-pointer" onchange="app.handleMonthChange(this.value)">
+            </div>
+
+            <button onclick="app.openTransactionModal()" class="bg-excel-600 hover:bg-excel-700 text-white px-3 py-1.5 rounded-md font-medium text-xs flex items-center space-x-1.5 shadow-sm transition-all">
+                <i class="fa-solid fa-plus"></i>
+                <span>Log Transaction</span>
+            </button>
+
+            <button onclick="app.exportToCSV()" class="bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 px-3 py-1.5 rounded-md font-medium text-xs flex items-center space-x-1 shadow-sm transition-all">
+                <i class="fa-solid fa-download text-slate-500"></i>
+                <span>Export CSV</span>
+            </button>
+
+            <button onclick="app.clearAllData()" class="text-slate-400 hover:text-rose-600 p-1.5 rounded-md transition-all" title="Permanently clear all salary entries and transactions">
+                <i class="fa-solid fa-trash-can text-xs"></i>
+            </button>
+
+            <span class="w-px h-5 bg-slate-200"></span>
+
+            <span id="userEmailLabel" class="text-xs text-slate-500 hidden md:inline"></span>
+            <button onclick="handleLogout()" class="text-slate-400 hover:text-rose-600 p-1.5 rounded-md transition-all" title="Sign out">
+                <i class="fa-solid fa-right-from-bracket text-xs"></i>
+            </button>
+        </div>
+    </header>
+
+    <!-- Sheet Tab Navigation Header -->
+    <nav class="bg-slate-200/70 border-b border-slate-300 px-4 pt-1 flex space-x-1 overflow-x-auto text-xs select-none">
+        <button onclick="app.switchTab('dashboard')" id="tab-btn-dashboard" class="tab-btn active px-4 py-2.5 rounded-t-md text-slate-600 hover:text-slate-900 transition-all flex items-center space-x-2">
+            <i class="fa-solid fa-chart-pie"></i>
+            <span>3. Monthly Dashboard</span>
+        </button>
+        <button onclick="app.switchTab('transactions')" id="tab-btn-transactions" class="tab-btn px-4 py-2.5 rounded-t-md text-slate-600 hover:text-slate-900 transition-all flex items-center space-x-2">
+            <i class="fa-solid fa-list-check"></i>
+            <span>2. Transactions Log</span>
+        </button>
+        <button onclick="app.switchTab('config')" id="tab-btn-config" class="tab-btn px-4 py-2.5 rounded-t-md text-slate-600 hover:text-slate-900 transition-all flex items-center space-x-2">
+            <i class="fa-solid fa-sliders"></i>
+            <span>1. Config & Salary</span>
+        </button>
+        <button onclick="app.switchTab('summary')" id="tab-btn-summary" class="tab-btn px-4 py-2.5 rounded-t-md text-slate-600 hover:text-slate-900 transition-all flex items-center space-x-2">
+            <i class="fa-solid fa-table"></i>
+            <span>4. Monthly Summary</span>
+        </button>
+        <button onclick="app.switchTab('yearly')" id="tab-btn-yearly" class="tab-btn px-4 py-2.5 rounded-t-md text-slate-600 hover:text-slate-900 transition-all flex items-center space-x-2">
+            <i class="fa-solid fa-calendar-days"></i>
+            <span>5. Yearly Dashboard</span>
+        </button>
+        <button onclick="app.switchTab('charts')" id="tab-btn-charts" class="tab-btn px-4 py-2.5 rounded-t-md text-slate-600 hover:text-slate-900 transition-all flex items-center space-x-2">
+            <i class="fa-solid fa-chart-line"></i>
+            <span>6. Visual Charts</span>
+        </button>
+    </nav>
+
+    <!-- Main Content Work Area -->
+    <main class="flex-1 overflow-y-auto p-4 md:p-6 space-y-6">
+
+        <!-- ========================================== -->
+        <!-- TAB 1: CONFIG SHEET -->
+        <!-- ========================================== -->
+        <section id="tab-content-config" class="tab-pane hidden space-y-6">
+            <div class="flex items-center justify-between border-b border-slate-200 pb-3">
+                <div>
+                    <h2 class="text-xl font-bold text-slate-900">Sheet 1: Config & Budget Limits</h2>
+                    <p class="text-xs text-slate-500">Configure salary history, category groups, and threshold warning limits.</p>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <!-- Salary History Table -->
+                <div class="bg-white rounded-lg shadow-sm border border-slate-200 p-4 space-y-4">
+                    <div class="flex items-center justify-between">
+                        <h3 class="font-semibold text-slate-800 text-sm flex items-center space-x-2">
+                            <i class="fa-solid fa-money-bill-wave text-emerald-600"></i>
+                            <span>Monthly Salary History</span>
+                        </h3>
+                        <button onclick="app.addSalaryRow()" class="text-xs bg-emerald-50 text-emerald-700 hover:bg-emerald-100 font-medium px-2 py-1 rounded">
+                            + Add Month
+                        </button>
+                    </div>
+                    <p class="text-xs text-slate-500">Set your real monthly income for accurate calculation of balance & percentages.</p>
+
+                    <div class="max-h-80 overflow-y-auto border border-slate-200 rounded">
+                        <table class="w-full text-xs text-left text-slate-700">
+                            <thead class="bg-slate-50 border-b border-slate-200 uppercase font-medium text-slate-500">
+                                <tr>
+                                    <th class="px-3 py-2">Month (YYYY-MM)</th>
+                                    <th class="px-3 py-2 text-right">Salary Amount (₹)</th>
+                                    <th class="px-2 py-2 text-center">Action</th>
+                                </tr>
+                            </thead>
+                            <tbody id="salaryHistoryBody" class="divide-y divide-slate-200 font-mono">
+                                <!-- Populated dynamically -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Category Groups & Named Lists -->
+                <div class="bg-white rounded-lg shadow-sm border border-slate-200 p-4 space-y-4 lg:col-span-2">
+                    <h3 class="font-semibold text-slate-800 text-sm flex items-center space-x-2">
+                        <i class="fa-solid fa-layer-group text-blue-600"></i>
+                        <span>Category Schema & Budget Limits</span>
+                    </h3>
+                    <p class="text-xs text-slate-500">Defined categories grouped by Type. Set monthly alert thresholds (₹) to flag overspending — leave at 0 for "no limit".</p>
+
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <!-- Responsible Expenses -->
+                        <div class="border border-slate-200 rounded p-3 bg-slate-50/50 space-y-2">
+                            <div class="flex items-center justify-between border-b border-slate-200 pb-2">
+                                <span class="font-bold text-xs text-slate-800 flex items-center space-x-1">
+                                    <span class="w-2.5 h-2.5 rounded-full bg-blue-500 inline-block"></span>
+                                    <span>Responsible</span>
+                                </span>
+                            </div>
+                            <div id="config-list-Responsible" class="space-y-1.5 text-xs">
+                                <!-- Rendered dynamically -->
+                            </div>
+                        </div>
+
+                        <!-- Bonus Expenses -->
+                        <div class="border border-slate-200 rounded p-3 bg-slate-50/50 space-y-2">
+                            <div class="flex items-center justify-between border-b border-slate-200 pb-2">
+                                <span class="font-bold text-xs text-slate-800 flex items-center space-x-1">
+                                    <span class="w-2.5 h-2.5 rounded-full bg-amber-500 inline-block"></span>
+                                    <span>Bonus</span>
+                                </span>
+                            </div>
+                            <div id="config-list-Bonus" class="space-y-1.5 text-xs">
+                                <!-- Rendered dynamically -->
+                            </div>
+                        </div>
+
+                        <!-- Investments & Savings -->
+                        <div class="border border-slate-200 rounded p-3 bg-slate-50/50 space-y-2">
+                            <div class="flex items-center justify-between border-b border-slate-200 pb-2">
+                                <span class="font-bold text-xs text-slate-800 flex items-center space-x-1">
+                                    <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 inline-block"></span>
+                                    <span>Investment</span>
+                                </span>
+                            </div>
+                            <div id="config-list-Investment" class="space-y-1.5 text-xs">
+                                <!-- Rendered dynamically -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+
+        <!-- ========================================== -->
+        <!-- TAB 2: TRANSACTIONS LOG SHEET -->
+        <!-- ========================================== -->
+        <section id="tab-content-transactions" class="tab-pane hidden space-y-4">
+            <div class="flex flex-wrap items-center justify-between border-b border-slate-200 pb-3 gap-2">
+                <div>
+                    <h2 class="text-xl font-bold text-slate-900">Sheet 2: Daily Transactions Log</h2>
+                    <p class="text-xs text-slate-500">The primary manual entry point. All downstream dashboard metrics auto-calculate from here.</p>
+                </div>
+                <div class="flex items-center space-x-2">
+                    <div class="relative">
+                        <i class="fa-solid fa-magnifying-glass absolute left-2.5 top-2.5 text-slate-400 text-xs"></i>
+                        <input type="text" id="txnSearchInput" placeholder="Filter notes or category..." onkeyup="app.renderTransactions()" class="pl-8 pr-3 py-1.5 text-xs border border-slate-300 rounded-md w-48 focus:outline-none focus:ring-1 focus:ring-excel-600">
+                    </div>
+                    <select id="txnTypeFilter" onchange="app.renderTransactions()" class="text-xs border border-slate-300 rounded-md px-2 py-1.5 bg-white focus:outline-none">
+                        <option value="ALL">All Types</option>
+                        <option value="Responsible">Responsible</option>
+                        <option value="Bonus">Bonus</option>
+                        <option value="Investment">Investment</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- Transactions Grid Table -->
+            <div class="bg-white rounded-lg shadow-sm border border-slate-200 overflow-hidden">
+                <div class="max-h-[600px] overflow-auto">
+                    <table class="w-full text-xs text-left border-collapse sheet-grid">
+                        <thead>
+                            <tr class="text-slate-600 font-semibold uppercase text-[11px] tracking-wider border-b border-slate-300">
+                                <th class="p-2.5 w-12 text-center bg-slate-100">#</th>
+                                <th class="p-2.5 w-28">Date</th>
+                                <th class="p-2.5 w-32">Type</th>
+                                <th class="p-2.5 w-40">Category</th>
+                                <th class="p-2.5 w-32 text-right">Amount (₹)</th>
+                                <th class="p-2.5">Notes</th>
+                                <th class="p-2.5 w-20 text-center">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="transactionsTableBody" class="divide-y divide-slate-200 font-mono">
+                            <!-- Populated dynamically -->
+                        </tbody>
+                    </table>
+                </div>
+                <!-- Table Footer / Count Info -->
+                <div class="bg-slate-50 border-t border-slate-200 p-2.5 flex items-center justify-between text-xs text-slate-500">
+                    <span id="txnCounterText">Showing 0 entries</span>
+                    <span class="text-slate-400 font-sans">Highlight rules active: <span class="inline-block w-2.5 h-2.5 bg-rose-100 border border-rose-300 rounded ml-1"></span> Amount &gt; ₹5,000</span>
+                </div>
+            </div>
+        </section>
+
+
+        <!-- ========================================== -->
+        <!-- TAB 3: MONTHLY DASHBOARD -->
+        <!-- ========================================== -->
+        <section id="tab-content-dashboard" class="tab-pane space-y-6">
+            <div class="flex flex-wrap items-center justify-between border-b border-slate-200 pb-3 gap-2">
+                <div>
+                    <h2 class="text-xl font-bold text-slate-900">Sheet 3: Current Month Dashboard</h2>
+                    <p class="text-xs text-slate-500">Real-time calculations for <span id="dashMonthLabel" class="font-bold text-excel-700">Selected Month</span> using dynamic formula aggregations.</p>
+                </div>
+                <div id="salaryAlertBadge"></div>
+            </div>
+
+            <!-- Top Summary KPI Cards -->
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <!-- Salary Card -->
+                <div class="bg-white rounded-xl p-4 border border-slate-200 shadow-sm relative overflow-hidden">
+                    <div class="flex items-center justify-between text-slate-500 text-xs font-medium">
+                        <span>Monthly Salary</span>
+                        <i class="fa-solid fa-wallet text-slate-400 text-base"></i>
+                    </div>
+                    <div class="mt-2 text-2xl font-bold text-slate-900 font-mono" id="kpiSalary">₹0</div>
+                    <p class="text-[11px] text-slate-500 mt-1">Configured for active month</p>
+                    <div class="absolute bottom-0 left-0 right-0 h-1 bg-slate-300"></div>
+                </div>
+
+                <!-- Total Spent Card -->
+                <div class="bg-white rounded-xl p-4 border border-slate-200 shadow-sm relative overflow-hidden">
+                    <div class="flex items-center justify-between text-slate-500 text-xs font-medium">
+                        <span>Total Spent (Resp + Bonus)</span>
+                        <i class="fa-solid fa-credit-card text-rose-500 text-base"></i>
+                    </div>
+                    <div class="mt-2 text-2xl font-bold text-rose-600 font-mono" id="kpiSpent">₹0</div>
+                    <p class="text-[11px] text-slate-500 mt-1" id="kpiSpentPct">0% of salary</p>
+                    <div class="absolute bottom-0 left-0 right-0 h-1 bg-rose-500"></div>
+                </div>
+
+                <!-- Total Invested Card -->
+                <div class="bg-white rounded-xl p-4 border border-slate-200 shadow-sm relative overflow-hidden">
+                    <div class="flex items-center justify-between text-slate-500 text-xs font-medium">
+                        <span>Total Invested & Saved</span>
+                        <i class="fa-solid fa-piggy-bank text-emerald-500 text-base"></i>
+                    </div>
+                    <div class="mt-2 text-2xl font-bold text-emerald-600 font-mono" id="kpiInvested">₹0</div>
+                    <p class="text-[11px] text-slate-500 mt-1" id="kpiInvestedPct">0% of salary</p>
+                    <div class="absolute bottom-0 left-0 right-0 h-1 bg-emerald-500"></div>
+                </div>
+
+                <!-- Remaining Balance Card -->
+                <div class="bg-white rounded-xl p-4 border border-slate-200 shadow-sm relative overflow-hidden" id="kpiBalanceCard">
+                    <div class="flex items-center justify-between text-slate-500 text-xs font-medium">
+                        <span>Remaining Net Balance</span>
+                        <i class="fa-solid fa-scale-balanced text-indigo-500 text-base"></i>
+                    </div>
+                    <div class="mt-2 text-2xl font-bold font-mono" id="kpiBalance">₹0</div>
+                    <p class="text-[11px] mt-1 font-medium" id="kpiBalanceStatus">Healthy (&gt;20%)</p>
+                    <div class="absolute bottom-0 left-0 right-0 h-1 bg-indigo-500" id="kpiBalanceBar"></div>
+                </div>
+            </div>
+
+            <!-- Breakdown Tables Grid -->
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <!-- Responsible Expenses Table -->
+                <div class="bg-white rounded-lg border border-slate-200 shadow-sm overflow-hidden">
+                    <div class="bg-blue-50/70 border-b border-blue-100 px-4 py-3 flex items-center justify-between">
+                        <div class="flex items-center space-x-2">
+                            <span class="w-3 h-3 rounded-full bg-blue-600"></span>
+                            <h3 class="font-bold text-slate-800 text-xs uppercase tracking-wider">Responsible Expenses</h3>
+                        </div>
+                        <span class="text-xs font-bold text-blue-800 font-mono" id="sumResponsibleHeader">₹0</span>
+                    </div>
+                    <div class="p-3">
+                        <table class="w-full text-xs text-left sheet-grid">
+                            <thead class="bg-slate-50 font-semibold text-slate-500">
+                                <tr>
+                                    <th class="p-2">Category</th>
+                                    <th class="p-2 text-right">MTD Spent</th>
+                                    <th class="p-2 text-right">% Salary</th>
+                                    <th class="p-2 text-center">Status</th>
+                                </tr>
+                            </thead>
+                            <tbody id="dashRespTable" class="divide-y divide-slate-200 font-mono">
+                                <!-- Populated dynamically -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Bonus Expenses Table -->
+                <div class="bg-white rounded-lg border border-slate-200 shadow-sm overflow-hidden">
+                    <div class="bg-amber-50/70 border-b border-amber-100 px-4 py-3 flex items-center justify-between">
+                        <div class="flex items-center space-x-2">
+                            <span class="w-3 h-3 rounded-full bg-amber-500"></span>
+                            <h3 class="font-bold text-slate-800 text-xs uppercase tracking-wider">Bonus Expenses</h3>
+                        </div>
+                        <span class="text-xs font-bold text-amber-800 font-mono" id="sumBonusHeader">₹0</span>
+                    </div>
+                    <div class="p-3">
+                        <table class="w-full text-xs text-left sheet-grid">
+                            <thead class="bg-slate-50 font-semibold text-slate-500">
+                                <tr>
+                                    <th class="p-2">Category</th>
+                                    <th class="p-2 text-right">MTD Spent</th>
+                                    <th class="p-2 text-right">% Salary</th>
+                                    <th class="p-2 text-center">Status</th>
+                                </tr>
+                            </thead>
+                            <tbody id="dashBonusTable" class="divide-y divide-slate-200 font-mono">
+                                <!-- Populated dynamically -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Investments & Savings Table -->
+                <div class="bg-white rounded-lg border border-slate-200 shadow-sm overflow-hidden">
+                    <div class="bg-emerald-50/70 border-b border-emerald-100 px-4 py-3 flex items-center justify-between">
+                        <div class="flex items-center space-x-2">
+                            <span class="w-3 h-3 rounded-full bg-emerald-600"></span>
+                            <h3 class="font-bold text-slate-800 text-xs uppercase tracking-wider">Investments & Savings</h3>
+                        </div>
+                        <span class="text-xs font-bold text-emerald-800 font-mono" id="sumInvestHeader">₹0</span>
+                    </div>
+                    <div class="p-3">
+                        <table class="w-full text-xs text-left sheet-grid">
+                            <thead class="bg-slate-50 font-semibold text-slate-500">
+                                <tr>
+                                    <th class="p-2">Category</th>
+                                    <th class="p-2 text-right">MTD Total</th>
+                                    <th class="p-2 text-right">% Salary</th>
+                                </tr>
+                            </thead>
+                            <tbody id="dashInvestTable" class="divide-y divide-slate-200 font-mono">
+                                <!-- Populated dynamically -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Daily Running Cumulative Spend (Query Simulation) -->
+            <div class="bg-white rounded-lg border border-slate-200 shadow-sm p-4 space-y-3">
+                <div class="flex items-center justify-between">
+                    <h3 class="font-semibold text-slate-800 text-sm flex items-center space-x-2">
+                        <i class="fa-solid fa-chart-line text-indigo-600"></i>
+                        <span>Daily Cumulative Burn Rate (Month-to-Date)</span>
+                    </h3>
+                    <span class="text-xs text-slate-500 font-mono">Formula: QUERY(Transactions!A:E, "Select Date, Sum...")</span>
+                </div>
+
+                <div class="max-h-60 overflow-y-auto border border-slate-200 rounded">
+                    <table class="w-full text-xs text-left sheet-grid">
+                        <thead class="bg-slate-50 font-semibold text-slate-600 uppercase text-[10px]">
+                            <tr>
+                                <th class="p-2">Date</th>
+                                <th class="p-2 text-right">Daily Spend (₹)</th>
+                                <th class="p-2 text-right">Cumulative Spend (₹)</th>
+                                <th class="p-2 text-right">Remaining Salary Balance (₹)</th>
+                            </tr>
+                        </thead>
+                        <tbody id="dailyBurnTableBody" class="divide-y divide-slate-200 font-mono">
+                            <!-- Populated dynamically -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+
+        <!-- ========================================== -->
+        <!-- TAB 4: MONTHLY SUMMARY (HISTORY TAB) -->
+        <!-- ========================================== -->
+        <section id="tab-content-summary" class="tab-pane hidden space-y-4">
+            <div class="border-b border-slate-200 pb-3">
+                <h2 class="text-xl font-bold text-slate-900">Sheet 4: Automated Monthly Summary History</h2>
+                <p class="text-xs text-slate-500">Auto-populated historical aggregates per month. Provides dynamic source data for trend charts.</p>
+            </div>
+
+            <div class="bg-white rounded-lg border border-slate-200 shadow-sm overflow-hidden">
+                <div class="overflow-x-auto">
+                    <table class="w-full text-xs text-left sheet-grid">
+                        <thead class="bg-slate-100 font-semibold text-slate-700 uppercase text-[11px]">
+                            <tr>
+                                <th class="p-3">Month</th>
+                                <th class="p-3 text-right">Salary (₹)</th>
+                                <th class="p-3 text-right">Total Resp. (₹)</th>
+                                <th class="p-3 text-right">Total Bonus (₹)</th>
+                                <th class="p-3 text-right">Total Invested (₹)</th>
+                                <th class="p-3 text-right">Total Spent (₹)</th>
+                                <th class="p-3 text-right">Remaining (₹)</th>
+                                <th class="p-3 text-right">Savings Rate %</th>
+                            </tr>
+                        </thead>
+                        <tbody id="monthlySummaryTableBody" class="divide-y divide-slate-200 font-mono">
+                            <!-- Populated dynamically -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+
+        <!-- ========================================== -->
+        <!-- TAB 5: YEARLY DASHBOARD -->
+        <!-- ========================================== -->
+        <section id="tab-content-yearly" class="tab-pane hidden space-y-6">
+            <div class="flex flex-wrap items-center justify-between border-b border-slate-200 pb-3 gap-2">
+                <div>
+                    <h2 class="text-xl font-bold text-slate-900">Sheet 5: Yearly Dashboard View</h2>
+                    <p class="text-xs text-slate-500">Aggregated annual perspective with month-by-month grid and multi-year comparisons.</p>
+                </div>
+                <div class="flex items-center space-x-2">
+                    <label class="text-xs font-semibold text-slate-600">Select Year:</label>
+                    <select id="yearlyYearSelect" onchange="app.renderYearlyDashboard()" class="text-xs font-bold border border-slate-300 rounded px-3 py-1.5 bg-white text-slate-800 shadow-sm">
+                        <!-- Populated dynamically -->
+                    </select>
+                </div>
+            </div>
+
+            <!-- Yearly Top KPI Cards -->
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+                <div class="bg-white rounded-lg p-3 border border-slate-200 shadow-sm">
+                    <span class="text-[11px] text-slate-500 block font-medium">Total Salary (Year)</span>
+                    <span class="text-lg font-bold font-mono text-slate-800" id="yKpiSalary">₹0</span>
+                </div>
+                <div class="bg-white rounded-lg p-3 border border-slate-200 shadow-sm">
+                    <span class="text-[11px] text-slate-500 block font-medium">Total Spent (Year)</span>
+                    <span class="text-lg font-bold font-mono text-rose-600" id="yKpiSpent">₹0</span>
+                </div>
+                <div class="bg-white rounded-lg p-3 border border-slate-200 shadow-sm">
+                    <span class="text-[11px] text-slate-500 block font-medium">Total Invested (Year)</span>
+                    <span class="text-lg font-bold font-mono text-emerald-600" id="yKpiInvested">₹0</span>
+                </div>
+                <div class="bg-white rounded-lg p-3 border border-slate-200 shadow-sm">
+                    <span class="text-[11px] text-slate-500 block font-medium">Net Savings (Year)</span>
+                    <span class="text-lg font-bold font-mono text-indigo-600" id="yKpiSaved">₹0</span>
+                </div>
+                <div class="bg-white rounded-lg p-3 border border-slate-200 shadow-sm">
+                    <span class="text-[11px] text-slate-500 block font-medium">Annual Savings Rate</span>
+                    <span class="text-lg font-bold font-mono text-emerald-700" id="yKpiRate">0%</span>
+                </div>
+            </div>
+
+            <!-- Month-by-Month Jan - Dec Grid -->
+            <div class="bg-white rounded-lg border border-slate-200 shadow-sm p-4 space-y-3">
+                <h3 class="font-bold text-slate-800 text-sm flex items-center space-x-2">
+                    <i class="fa-solid fa-calendar-days text-emerald-600"></i>
+                    <span>Month-by-Month Breakdown (Jan - Dec)</span>
+                </h3>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-xs text-left sheet-grid">
+                        <thead class="bg-slate-50 font-semibold text-slate-600 uppercase text-[10px]">
+                            <tr>
+                                <th class="p-2">Month</th>
+                                <th class="p-2 text-right">Salary (₹)</th>
+                                <th class="p-2 text-right">Responsible (₹)</th>
+                                <th class="p-2 text-right">Bonus (₹)</th>
+                                <th class="p-2 text-right">Investments (₹)</th>
+                                <th class="p-2 text-right">Remaining (₹)</th>
+                                <th class="p-2 text-right">Savings Rate %</th>
+                            </tr>
+                        </thead>
+                        <tbody id="yearlyMonthGrid" class="divide-y divide-slate-200 font-mono">
+                            <!-- Populated dynamically -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Year over Year Comparison Table -->
+            <div class="bg-white rounded-lg border border-slate-200 shadow-sm p-4 space-y-3">
+                <h3 class="font-bold text-slate-800 text-sm flex items-center space-x-2">
+                    <i class="fa-solid fa-code-compare text-blue-600"></i>
+                    <span>Year-over-Year (YoY) Multi-Year Comparison</span>
+                </h3>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-xs text-left sheet-grid">
+                        <thead class="bg-slate-50 font-semibold text-slate-600 uppercase text-[10px]">
+                            <tr>
+                                <th class="p-2.5">Year</th>
+                                <th class="p-2.5 text-right">Total Salary (₹)</th>
+                                <th class="p-2.5 text-right">Total Spent (₹)</th>
+                                <th class="p-2.5 text-right">Total Invested (₹)</th>
+                                <th class="p-2.5 text-right">Savings Rate %</th>
+                            </tr>
+                        </thead>
+                        <tbody id="yoyTableBody" class="divide-y divide-slate-200 font-mono">
+                            <!-- Populated dynamically -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+
+        <!-- ========================================== -->
+        <!-- TAB 6: CHARTS DASHBOARD -->
+        <!-- ========================================== -->
+        <section id="tab-content-charts" class="tab-pane hidden space-y-6">
+            <div class="border-b border-slate-200 pb-3">
+                <h2 class="text-xl font-bold text-slate-900">Sheet 6: Interactive Visual Analytics</h2>
+                <p class="text-xs text-slate-500">Charts automatically rendered from Monthly Summary and Transactions tables.</p>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <!-- Chart 1: Current Month Split -->
+                <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-4 space-y-3">
+                    <h3 class="font-semibold text-xs text-slate-700 uppercase tracking-wider flex items-center justify-between">
+                        <span>Current Month Expense & Investment Split</span>
+                        <i class="fa-solid fa-chart-pie text-slate-400"></i>
+                    </h3>
+                    <div class="h-64 relative flex items-center justify-center">
+                        <canvas id="chartMonthSplit"></canvas>
+                    </div>
+                </div>
+
+                <!-- Chart 2: Type % of Salary -->
+                <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-4 space-y-3">
+                    <h3 class="font-semibold text-xs text-slate-700 uppercase tracking-wider flex items-center justify-between">
+                        <span>Type Split as % of Salary (Current Month)</span>
+                        <i class="fa-solid fa-chart-column text-slate-400"></i>
+                    </h3>
+                    <div class="h-64 relative">
+                        <canvas id="chartTypePct"></canvas>
+                    </div>
+                </div>
+
+                <!-- Chart 3: Savings Rate Trend -->
+                <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-4 space-y-3">
+                    <h3 class="font-semibold text-xs text-slate-700 uppercase tracking-wider flex items-center justify-between">
+                        <span>Savings Rate % Trend Over Months</span>
+                        <i class="fa-solid fa-chart-line text-slate-400"></i>
+                    </h3>
+                    <div class="h-64 relative">
+                        <canvas id="chartSavingsTrend"></canvas>
+                    </div>
+                </div>
+
+                <!-- Chart 4: Last 6 Months Stacked Spend -->
+                <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-4 space-y-3">
+                    <h3 class="font-semibold text-xs text-slate-700 uppercase tracking-wider flex items-center justify-between">
+                        <span>Monthly Spend & Invest Stacked Trend</span>
+                        <i class="fa-solid fa-chart-bar text-slate-400"></i>
+                    </h3>
+                    <div class="h-64 relative">
+                        <canvas id="chartStackedTrend"></canvas>
+                    </div>
+                </div>
+
+                <!-- Chart 5: Yearly Spent vs Invested -->
+                <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-4 space-y-3">
+                    <h3 class="font-semibold text-xs text-slate-700 uppercase tracking-wider flex items-center justify-between">
+                        <span>Yearly Total Spent vs Invested</span>
+                        <i class="fa-solid fa-chart-area text-slate-400"></i>
+                    </h3>
+                    <div class="h-64 relative">
+                        <canvas id="chartYearlyTotals"></canvas>
+                    </div>
+                </div>
+
+                <!-- Chart 6: YoY Savings Rate Trend -->
+                <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-4 space-y-3">
+                    <h3 class="font-semibold text-xs text-slate-700 uppercase tracking-wider flex items-center justify-between">
+                        <span>Year-over-Year Savings Rate Trend</span>
+                        <i class="fa-solid fa-arrow-trend-up text-slate-400"></i>
+                    </h3>
+                    <div class="h-64 relative">
+                        <canvas id="chartYoYSavings"></canvas>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+
+    <!-- Modal: Add/Edit Transaction -->
+    <div id="txnModal" class="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-white rounded-xl shadow-2xl max-w-md w-full p-6 border border-slate-200">
+            <div class="flex items-center justify-between border-b border-slate-200 pb-3">
+                <h3 class="font-bold text-slate-900 text-base" id="txnModalTitle">Log Daily Transaction</h3>
+                <button onclick="app.closeTransactionModal()" class="text-slate-400 hover:text-slate-600 text-lg">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+
+            <form id="txnForm" onsubmit="app.saveTransaction(event)" class="mt-4 space-y-4">
+                <input type="hidden" id="editTxnId" value="">
+
+                <div>
+                    <label class="block text-xs font-semibold text-slate-700 mb-1">Date</label>
+                    <input type="date" id="inputTxnDate" required class="w-full text-xs border border-slate-300 rounded-md p-2 focus:ring-1 focus:ring-excel-600 focus:outline-none">
+                </div>
+
+                <div>
+                    <label class="block text-xs font-semibold text-slate-700 mb-1">Type</label>
+                    <select id="inputTxnType" onchange="app.handleTypeDropdownChange()" required class="w-full text-xs border border-slate-300 rounded-md p-2 bg-white focus:ring-1 focus:ring-excel-600 focus:outline-none">
+                        <option value="Responsible">Responsible Expenses</option>
+                        <option value="Bonus">Bonus Expenses</option>
+                        <option value="Investment">Investments & Savings</option>
+                    </select>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-semibold text-slate-700 mb-1">Category (Dependent Dropdown)</label>
+                    <select id="inputTxnCategory" required class="w-full text-xs border border-slate-300 rounded-md p-2 bg-white focus:ring-1 focus:ring-excel-600 focus:outline-none">
+                        <!-- Populated dynamically -->
+                    </select>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-semibold text-slate-700 mb-1">Amount (₹)</label>
+                    <input type="number" step="0.01" min="1" id="inputTxnAmount" required placeholder="e.g. 1500" class="w-full text-xs border border-slate-300 rounded-md p-2 font-mono focus:ring-1 focus:ring-excel-600 focus:outline-none">
+                </div>
+
+                <div>
+                    <label class="block text-xs font-semibold text-slate-700 mb-1">Notes / Description</label>
+                    <input type="text" id="inputTxnNotes" placeholder="e.g. Weekly grocery at DMart" class="w-full text-xs border border-slate-300 rounded-md p-2 focus:outline-none">
+                </div>
+
+                <div class="pt-2 flex justify-end space-x-2">
+                    <button type="button" onclick="app.closeTransactionModal()" class="px-3 py-1.5 border border-slate-300 rounded-md text-xs font-medium text-slate-600 hover:bg-slate-50">Cancel</button>
+                    <button type="submit" class="px-4 py-1.5 bg-excel-600 hover:bg-excel-700 text-white rounded-md text-xs font-medium shadow-sm">Save Entry</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    </div> <!-- /#appShell -->
+
+    <!-- App scripts: config -> app class -> firebase init -> auth wiring -->
+    <script src="js/config.js"></script>
+    <script src="js/app.js"></script>
+    <script src="js/firebase-config.js"></script>
+    <script src="js/auth.js"></script>
+</body>
+</html>
