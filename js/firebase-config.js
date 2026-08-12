@@ -23,9 +23,10 @@ const firebaseConfig = {
   projectId: "sgk-bg-v2",
   storageBucket: "sgk-bg-v2.firebasestorage.app",
   messagingSenderId: "484971771651",
-  appId: "1:484971771651:web:51b306b1440d803cbf5b36",
-  measurementId: "G-TM81SSK3TX"
+  appId: "1:484971771651:web:6452335e59712c7cbf5b36",
+  measurementId: "G-3H8GWV1XWY"
 };
+
 
 firebase.initializeApp(firebaseConfig);
 const auth = firebase.auth();
